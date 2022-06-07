@@ -61,9 +61,9 @@ input[type=text]:focus {
 <div class="demo-wrapper">
 	<center><a class="back-to-home" href="/"><img src="{{ site.url }}/img/{{ site.logo }}" alt="{{ site.title }}" width="70" height="70"></a></center>
 	<center><h1>Pick Up Points</h1></center>
-	<center><h5>Enter Your Community Or Pickup Code Below</h5></center>
+	<center><h5>Enter Your Community Or Pickup Point Code Below</h5></center>
 <div id="search-container">
-<input type="text" id="search-input" placeholder="Search by community or code">
+<input type="text" id="search-input" placeholder="Search by community or pickup point code">
 	<ul id="results-container"></ul>
 </div>
 </div>
@@ -82,7 +82,7 @@ input[type=text]:focus {
         resultsContainer: document.getElementById('results-container'),
         json: '/search.json',
         searchResultTemplate: '<h4><a href="{url}">{title} Invite You To</a></h4> {snippet} - {date}',
-        noResultsText: 'No Agent Found!',
+        noResultsText: 'No Pickup Point Found!',
         limit: 1,
         fuzzy: false,
         exclude: ['welcome']
