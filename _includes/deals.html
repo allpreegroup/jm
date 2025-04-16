@@ -1,24 +1,21 @@
  <style>
-   #deals-container {
-    display: absolute;
-    flex-wrap: wrap;
-    gap: 12px;
-    padding: 10px;
-    font-family: Arial, sans-serif;
+  #deals-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px;
+  font-family: Arial, sans-serif;
+  max-width: 100%; /* Default full width */
+  margin: 0 auto;
+  justify-content: center;
+}
 
-    /* NEW: limit width and center it */
+/* 💻 Only limit width on screens 768px and wider */
+@media (min-width: 768px) {
+  #deals-container {
     max-width: 350px;
-    margin: 0 auto;
-    justify-content: center;
-
-	/* 💻 Only apply max-width on larger screens (desktop) */
-  @media (min-width: 768px) {
-    #deals-container {
-      max-width: 100%;
-      margin: 0 auto;
-	    
   }
-  }
+}
     .countdown {
       text-align: center;
       font-size: 18px;
