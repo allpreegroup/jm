@@ -1,4 +1,19 @@
- <style>
+<style>
+  .Vertically {
+    /* Default styles for mobile (no vertical centering) */
+  }
+
+  @media (min-width: 768px) {
+    .Vertically {
+      height: 70vh;
+      display: flex;
+      align-items: center;
+    }
+  }
+</style>
+
+
+<style>
   #deals-container {
   display: absolute;
   max-height: auto; /* Default full height */
@@ -192,7 +207,7 @@
     }
   </style>
 
-
+<div class="Vertically">
  <div class="container">
             <div class="row land">
                 <div class="home">
@@ -381,4 +396,4 @@
 
   </script>
            
-</div></div></div></div></div>
+</div></div></div></div></div></div>
