@@ -295,89 +295,115 @@ async function loadSheetUrls() {
 
 
  async function loadDeals() {
-      const container = document.getElementById('deals-container');
-      container.innerHTML = '';
+  const container = document.getElementById('deals-container');
+  container.innerHTML = '';
 
-      try {
-        const res = await fetch(sheetUrl);
-        const rows = await res.json();
+  try {
+    const res = await fetch(sheetUrl);
+    const rows = await res.json();
 
-        let currentBrand = '';
-        let currentLogo = '';
-        let brandSection = null;
-        let grid = null;
+    // Step 1: Group deals by brand
+    const brandMap = new Map();
 
-        rows.forEach(row => {
-          if (row.BrandName && row.BrandLogo) {
-            currentBrand = row.BrandName;
-            currentLogo = row.BrandLogo;
+    rows.forEach(row => {
+      if (!row.BrandName || !row.BrandLogo || !row.ProductName || !row.ImageURL) return;
 
-            brandSection = document.createElement('div');
-            brandSection.className = 'brand-section';
+      const brand = row.BrandName;
+      const logo = row.BrandLogo;
+      const original = parseFloat(row.OriginalPrice.replace(/,/g, '')) || 0;
+      const discount = parseFloat(row.DiscountPrice.replace(/,/g, '')) || 0;
+      const percentOff = original && discount ? Math.round((1 - discount / original) * 100) : 0;
 
-            const brandDiv = document.createElement('div');
-            brandDiv.className = 'brand';
-            const expireDate = row.ExpiryDate;
-            const timerId = `timer-${Math.random().toString(36).substring(2)}`;
+      const deal = { ...row, original, discount, percentOff };
 
-            brandDiv.innerHTML = `
-            <div class="brand-logo-container">
-            <img src="${currentLogo}" alt="${currentBrand}" />
-            </div>
-            <span class="brand-name">${currentBrand}</span>
-            <span class="brand-timer" id="${timerId}"></span>
-          `;
-
-        if (expireDate) {
-           startBrandCountdown(expireDate, timerId);
-          }
-
-
-            grid = document.createElement('div');
-            grid.className = 'deal-grid';
-
-            brandSection.appendChild(brandDiv);
-            brandSection.appendChild(grid);
-            container.appendChild(brandSection);
-          }
-
-          if (row.ProductName && row.ImageURL) {
-            const original = parseFloat(row.OriginalPrice.replace(/,/g, '')) || 0;
-            const discount = parseFloat(row.DiscountPrice.replace(/,/g, '')) || 0;
-            const percentOff = original && discount ? Math.round((1 - discount / original) * 100) : 0;
-
-            const shortName = row.ProductName.length > 15 ? row.ProductName.slice(0, 15) + '...' : row.ProductName;
-
-            const dealCard = document.createElement('div');
-            dealCard.className = 'deal';
-            dealCard.innerHTML = `
-              <span class="discount-badge">${percentOff}% OFF</span>
-              <img src="${row.ImageURL}" alt="${row.ProductName}">
-              <div class="deal-content">
-                <div class="deal-title">${shortName}</div>
-                <div class="price">JMD $${row.OriginalPrice}</div>
-                <div class="discount">JMD $${row.DiscountPrice}</div>
-              </div>
-            `;
-            dealCard.addEventListener('click', () => {
-              openPopup({
-                image: row.ImageURL,
-                name: row.ProductName,
-                original: row.OriginalPrice,
-                discount: row.DiscountPrice,
-                description: row.Description
-              });
-            });
-
-            grid?.appendChild(dealCard);
-          }
-        });
-
-      } catch (err) {
-        console.error('Failed to load deals:', err);
-        container.innerHTML = 'Failed to load deals. Please check the sheet URL.';
+      if (!brandMap.has(brand)) {
+        brandMap.set(brand, { logo, deals: [deal] });
+      } else {
+        brandMap.get(brand).deals.push(deal);
       }
-    } 
+    });
+
+    // Step 2: Calculate average discount and find highest
+    let topBrand = null;
+    let highestAvg = 0;
+
+    for (const [brand, { logo, deals }] of brandMap.entries()) {
+      const avg = deals.reduce((sum, d) => sum + d.percentOff, 0) / deals.length;
+      if (avg > highestAvg) {
+        highestAvg = avg;
+        topBrand = { brand, logo, deals };
+      }
+    }
+
+    if (!topBrand) {
+      container.textContent = 'No valid deals found.';
+      return;
+    }
+
+    // Step 3: Render only the top brand
+    const { brand, logo, deals } = topBrand;
+
+    const brandSection = document.createElement('div');
+    brandSection.className = 'brand-section';
+
+    const brandDiv = document.createElement('div');
+    brandDiv.className = 'brand';
+    const expireDate = deals[0].ExpiryDate;
+    const timerId = `timer-${Math.random().toString(36).substring(2)}`;
+
+    brandDiv.innerHTML = `
+      <div class="brand-logo-container">
+        <img src="${logo}" alt="${brand}" />
+      </div>
+      <span class="brand-name">${brand}</span>
+      <span class="brand-timer" id="${timerId}"></span>
+    `;
+
+    if (expireDate) {
+      startBrandCountdown(expireDate, timerId);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'deal-grid';
+
+    deals.forEach(row => {
+      const shortName = row.ProductName.length > 15 ? row.ProductName.slice(0, 15) + '...' : row.ProductName;
+
+      const dealCard = document.createElement('div');
+      dealCard.className = 'deal';
+      dealCard.innerHTML = `
+        <span class="discount-badge">${row.percentOff}% OFF</span>
+        <img src="${row.ImageURL}" alt="${row.ProductName}">
+        <div class="deal-content">
+          <div class="deal-title">${shortName}</div>
+          <div class="price">JMD $${row.OriginalPrice}</div>
+          <div class="discount">JMD $${row.DiscountPrice}</div>
+        </div>
+      `;
+
+      dealCard.addEventListener('click', () => {
+        openPopup({
+          image: row.ImageURL,
+          name: row.ProductName,
+          original: row.OriginalPrice,
+          discount: row.DiscountPrice,
+          description: row.Description
+        });
+      });
+
+      grid.appendChild(dealCard);
+    });
+
+    brandSection.appendChild(brandDiv);
+    brandSection.appendChild(grid);
+    container.appendChild(brandSection);
+
+  } catch (err) {
+    console.error('Failed to load deals:', err);
+    container.innerHTML = 'Failed to load deals. Please check the sheet URL.';
+  }
+}
+
 
     loadDeals();
  
