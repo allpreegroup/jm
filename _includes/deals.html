@@ -278,6 +278,8 @@ async function loadSheetUrls() {
   }
 }
 
+	loadSheetUrls();
+
 async function loadBestBrandFromAllSheets() {
   const container = document.getElementById('deals-container');
   container.innerHTML = '';
@@ -446,8 +448,6 @@ function startBrandCountdown(expireDate, elementId) {
   const timer = setInterval(update, 1000);
 }
 
-// Start everything
-loadSheetUrls();
 </script>
 
 				
