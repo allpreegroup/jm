@@ -258,7 +258,7 @@
     </div>
   </div>
 
-<script>
+<!-- <script>
  /* https://opensheet.elk.sh/1zm3qwBaxHXtFo3G78B3syL1yxhChcClQl-mNOOknS0w/deals */
 	const sheetUrl = 'https://opensheet.elk.sh/1WcTbHLTOpUl-TK7r0rTWZ_PuT0umIaBc00tzGZozgFw/Sheet1';
   
@@ -394,7 +394,131 @@
   const timer = setInterval(update, 1000);
 }
 
-  </script>
+  </script> -->
+<script>
+const mainSheetUrl = 'https://opensheet.elk.sh/1WcTbHLTOpUl-TK7r0rTWZ_PuT0umIaBc00tzGZozgFw/MainSheet';
+
+async function loadDeals() {
+  const container = document.getElementById('deals-container');
+  container.innerHTML = '';
+
+  try {
+    const mainRes = await fetch(mainSheetUrl);
+    const brandSheets = await mainRes.json();
+
+    let bestDeal = null;
+
+    for (const brand of brandSheets) {
+      const brandName = brand.BrandName;
+      const brandLogo = brand.BrandLogo;
+      const sheetUrl = brand.SheetURL;
+      const expiryDate = brand.ExpiryDate;
+
+      if (!brandName || !brandLogo || !sheetUrl) continue;
+
+      try {
+        const res = await fetch(sheetUrl);
+        const products = await res.json();
+
+        for (const product of products) {
+          if (!product.ProductName || !product.ImageURL || !product.OriginalPrice || !product.DiscountPrice) continue;
+
+          const original = parseFloat(product.OriginalPrice.replace(/,/g, '')) || 0;
+          const discount = parseFloat(product.DiscountPrice.replace(/,/g, '')) || 0;
+
+          if (!original || !discount || discount >= original) continue;
+
+          const percentOff = Math.round((1 - discount / original) * 100);
+
+          if (!bestDeal || percentOff > bestDeal.percentOff) {
+            bestDeal = {
+              percentOff,
+              brandName,
+              brandLogo,
+              expiryDate,
+              products // ✅ keep the entire product list for this brand
+            };
+          }
+        }
+
+      } catch (err) {
+        console.warn(`Failed to load brand sheet: ${sheetUrl}`, err);
+      }
+    }
+
+    // ✅ Show ALL products from the brand with the highest discount
+    if (bestDeal) {
+      const { brandName, brandLogo, expiryDate, products } = bestDeal;
+      const timerId = `timer-${Math.random().toString(36).substring(2)}`;
+
+      const brandSection = document.createElement('div');
+      brandSection.className = 'brand-section';
+
+      const brandDiv = document.createElement('div');
+      brandDiv.className = 'brand';
+      brandDiv.innerHTML = `
+        <div class="brand-logo-container">
+          <img src="${brandLogo}" alt="${brandName}" />
+        </div>
+        <span class="brand-name">${brandName}</span>
+        <span class="brand-timer" id="${timerId}"></span>
+      `;
+
+      if (expiryDate) {
+        startBrandCountdown(expiryDate, timerId);
+      }
+
+      const grid = document.createElement('div');
+      grid.className = 'deal-grid';
+
+      products.forEach(product => {
+        if (!product.ProductName || !product.ImageURL || !product.OriginalPrice || !product.DiscountPrice) return;
+
+        const original = parseFloat(product.OriginalPrice.replace(/,/g, '')) || 0;
+        const discount = parseFloat(product.DiscountPrice.replace(/,/g, '')) || 0;
+        const percentOff = original && discount ? Math.round((1 - discount / original) * 100) : 0;
+
+        const shortName = product.ProductName.length > 15 ? product.ProductName.slice(0, 15) + '...' : product.ProductName;
+
+        const dealCard = document.createElement('div');
+        dealCard.className = 'deal';
+        dealCard.innerHTML = `
+          <span class="discount-badge">${percentOff}% OFF</span>
+          <img src="${product.ImageURL}" alt="${product.ProductName}">
+          <div class="deal-content">
+            <div class="deal-title">${shortName}</div>
+            <div class="price">JMD $${product.OriginalPrice}</div>
+            <div class="discount">JMD $${product.DiscountPrice}</div>
+          </div>
+        `;
+
+        dealCard.addEventListener('click', () => {
+          openPopup({
+            image: product.ImageURL,
+            name: product.ProductName,
+            original: product.OriginalPrice,
+            discount: product.DiscountPrice,
+            description: product.Description
+          });
+        });
+
+        grid.appendChild(dealCard);
+      });
+
+      brandSection.appendChild(brandDiv);
+      brandSection.appendChild(grid);
+      container.appendChild(brandSection);
+
+    } else {
+      container.textContent = 'No valid deals found.';
+    }
+
+  } catch (err) {
+    console.error('Failed to load main sheet:', err);
+    container.innerHTML = 'Failed to load deals.';
+  }
+}
+</script>
 
            
 </div></div></div></div></div></div>
