@@ -396,129 +396,199 @@
 
   </script> -->
 <script>
-const mainSheetUrl = 'https://opensheet.elk.sh/1WcTbHLTOpUl-TK7r0rTWZ_PuT0umIaBc00tzGZozgFw/Sheet1';
+ let sheetUrls = [];
+	
+  // Initialize the app, calling loadBrandLocations and loadDeals
+async function init() {
+  await loadDeals();           // Then load the deals
+}	
 
-async function loadDeals() {
+async function loadSheetUrls() { 
+  try {
+    const response = await fetch('https://opensheet.elk.sh/1WcTbHLTOpUl-TK7r0rTWZ_PuT0umIaBc00tzGZozgFw/Sheet1');
+    const data = await response.json();
+
+    // Convert data into just a flat array of URLs
+    sheetUrls = data.map(row => row.sheeturls);  // assumes column name is exactly 'sheeturls'
+
+    console.log(sheetUrls);
+    init(); // ✅ Start the app after URLs are ready
+  } catch (err) {
+    console.error('Failed to load sheet URLs:', err);
+  }
+}
+
+loadSheetUrls();
+	
+  function openPopup({ image, name, original, discount, description }) {
+  const originalPrice = parseFloat(original.replace(/,/g, '')) || 0;
+  const discountPrice = parseFloat(discount.replace(/,/g, '')) || 0;
+  const percentOff = originalPrice && discountPrice ? Math.round((1 - discountPrice / originalPrice) * 100) : 0;
+
+  document.getElementById('popupImg').src = image;
+  document.getElementById('popupTitle').textContent = name;
+  document.getElementById('popupPrice').textContent = `Original Price: JMD ${original}`;
+  document.getElementById('popupDiscount').textContent = `Now: JMD ${discount}`;
+  document.getElementById('popupDesc').textContent = description || '';
+  document.getElementById('popupBadge').textContent = `${percentOff}% OFF`;
+  document.getElementById('popup').style.display = 'flex';
+}
+
+
+    function closePopup() {
+      document.getElementById('popup').style.display = 'none';
+    }
+
+	async function fetchWithTimeout(url, timeout = 7000) {
+  return Promise.race([
+    fetch(url).then(res => res.json()),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+  ]).catch(error => ({ error }));
+}
+	
+   async function loadDeals() {
   const container = document.getElementById('deals-container');
   container.innerHTML = '';
 
+  const allResponses = await Promise.all(
+    sheetUrls.map(url => fetchWithTimeout(url))
+  );
+
   try {
-    const mainRes = await fetch(mainSheetUrl);
-    const brandSheets = await mainRes.json();
+    // Flatten and filter responses
+    const allRows = allResponses
+      .filter(res => Array.isArray(res)) // skip failed fetches
+      .flat();
 
-    let bestDeal = null;
+    // Group rows by brand and calculate highest % off per brand
+    const brandDiscounts = {};
+    const brandRows = {};
 
-    for (const brand of brandSheets) {
-      const brandName = brand.BrandName;
-      const brandLogo = brand.BrandLogo;
-      const sheetUrl = brand.SheetURL;
-      const expiryDate = brand.ExpiryDate;
+    allRows.forEach(row => {
+      if (!row.ProductName || !row.OriginalPrice || !row.DiscountPrice || !row.BrandName) return;
 
-      if (!brandName || !brandLogo || !sheetUrl) continue;
+      const original = parseFloat(row.OriginalPrice.replace(/,/g, '')) || 0;
+      const discount = parseFloat(row.DiscountPrice.replace(/,/g, '')) || 0;
+      const percentOff = original && discount ? Math.round((1 - discount / original) * 100) : 0;
 
-      try {
-        const res = await fetch(sheetUrl);
-        const products = await res.json();
+      if (!brandDiscounts[row.BrandName] || percentOff > brandDiscounts[row.BrandName]) {
+        brandDiscounts[row.BrandName] = percentOff;
+      }
 
-        for (const product of products) {
-          if (!product.ProductName || !product.ImageURL || !product.OriginalPrice || !product.DiscountPrice) continue;
+      if (!brandRows[row.BrandName]) brandRows[row.BrandName] = [];
+      brandRows[row.BrandName].push({ ...row, percentOff });
+    });
 
-          const original = parseFloat(product.OriginalPrice.replace(/,/g, '')) || 0;
-          const discount = parseFloat(product.DiscountPrice.replace(/,/g, '')) || 0;
-
-          if (!original || !discount || discount >= original) continue;
-
-          const percentOff = Math.round((1 - discount / original) * 100);
-
-          if (!bestDeal || percentOff > bestDeal.percentOff) {
-            bestDeal = {
-              percentOff,
-              brandName,
-              brandLogo,
-              expiryDate,
-              products // ✅ keep the entire product list for this brand
-            };
-          }
-        }
-
-      } catch (err) {
-        console.warn(`Failed to load brand sheet: ${sheetUrl}`, err);
+    // Find brand with highest discount
+    let topBrand = '';
+    let topDiscount = -1;
+    for (const brand in brandDiscounts) {
+      if (brandDiscounts[brand] > topDiscount) {
+        topDiscount = brandDiscounts[brand];
+        topBrand = brand;
       }
     }
 
-    // ✅ Show ALL products from the brand with the highest discount
-    if (bestDeal) {
-      const { brandName, brandLogo, expiryDate, products } = bestDeal;
-      const timerId = `timer-${Math.random().toString(36).substring(2)}`;
+    if (!topBrand) {
+      container.innerHTML = 'No valid deals found.';
+      return;
+    }
 
-      const brandSection = document.createElement('div');
-      brandSection.className = 'brand-section';
+    // Render only the top brand's products
+    const rows = brandRows[topBrand];
 
-      const brandDiv = document.createElement('div');
-      brandDiv.className = 'brand';
-      brandDiv.innerHTML = `
-        <div class="brand-logo-container">
-          <img src="${brandLogo}" alt="${brandName}" />
+    let currentBrand = topBrand;
+    let currentLogo = rows.find(r => r.BrandLogo)?.BrandLogo || '';
+    let brandSection = document.createElement('div');
+    brandSection.className = 'brand-section';
+
+    const brandDiv = document.createElement('div');
+    brandDiv.className = 'brand';
+    const expireDate = rows.find(r => r.ExpiryDate)?.ExpiryDate;
+    const timerId = `timer-${Math.random().toString(36).substring(2)}`;
+
+    brandDiv.innerHTML = `
+      <div class="brand-logo-container">
+        <img src="${currentLogo}" alt="${currentBrand}" />
+      </div>
+      <span class="brand-name">${currentBrand}</span>
+      <span class="brand-timer" id="${timerId}"></span>
+    `;
+
+    if (expireDate) {
+      startBrandCountdown(expireDate, timerId);
+    }
+
+    const grid = document.createElement('div');
+    grid.className = 'deal-grid';
+
+    brandSection.appendChild(brandDiv);
+    brandSection.appendChild(grid);
+    container.appendChild(brandSection);
+
+    rows.forEach(row => {
+      const shortName = row.ProductName.length > 15 ? row.ProductName.slice(0, 15) + '...' : row.ProductName;
+
+      const dealCard = document.createElement('div');
+      dealCard.className = 'deal';
+      dealCard.innerHTML = `
+        <span class="discount-badge">${row.percentOff}% OFF</span>
+        <img src="${row.ImageURL}" alt="${row.ProductName}">
+        <div class="deal-content">
+          <div class="deal-title">${shortName}</div>
+          <div class="price">JMD $${row.OriginalPrice}</div>
+          <div class="discount">JMD $${row.DiscountPrice}</div>
         </div>
-        <span class="brand-name">${brandName}</span>
-        <span class="brand-timer" id="${timerId}"></span>
       `;
-
-      if (expiryDate) {
-        startBrandCountdown(expiryDate, timerId);
-      }
-
-      const grid = document.createElement('div');
-      grid.className = 'deal-grid';
-
-      products.forEach(product => {
-        if (!product.ProductName || !product.ImageURL || !product.OriginalPrice || !product.DiscountPrice) return;
-
-        const original = parseFloat(product.OriginalPrice.replace(/,/g, '')) || 0;
-        const discount = parseFloat(product.DiscountPrice.replace(/,/g, '')) || 0;
-        const percentOff = original && discount ? Math.round((1 - discount / original) * 100) : 0;
-
-        const shortName = product.ProductName.length > 15 ? product.ProductName.slice(0, 15) + '...' : product.ProductName;
-
-        const dealCard = document.createElement('div');
-        dealCard.className = 'deal';
-        dealCard.innerHTML = `
-          <span class="discount-badge">${percentOff}% OFF</span>
-          <img src="${product.ImageURL}" alt="${product.ProductName}">
-          <div class="deal-content">
-            <div class="deal-title">${shortName}</div>
-            <div class="price">JMD $${product.OriginalPrice}</div>
-            <div class="discount">JMD $${product.DiscountPrice}</div>
-          </div>
-        `;
-
-        dealCard.addEventListener('click', () => {
-          openPopup({
-            image: product.ImageURL,
-            name: product.ProductName,
-            original: product.OriginalPrice,
-            discount: product.DiscountPrice,
-            description: product.Description
-          });
+      dealCard.addEventListener('click', () => {
+        openPopup({
+          image: row.ImageURL,
+          name: row.ProductName,
+          original: row.OriginalPrice,
+          discount: row.DiscountPrice,
+          description: row.Description
         });
-
-        grid.appendChild(dealCard);
       });
 
-      brandSection.appendChild(brandDiv);
-      brandSection.appendChild(grid);
-      container.appendChild(brandSection);
-
-    } else {
-      container.textContent = 'No valid deals found.';
-    }
+      grid.appendChild(dealCard);
+    });
 
   } catch (err) {
-    console.error('Failed to load main sheet:', err);
-    container.innerHTML = 'Failed to load deals.';
+    console.error('Failed to load deals:', err);
+    container.innerHTML = 'Failed to load deals. Please check the sheet URL.';
   }
 }
-</script>
+
+
+    loadDeals();
+ 
+  document.getElementById('popup').addEventListener('click', function (e) {
+  if (e.target === this) {
+    closePopup();
+  }
+});
+      function startBrandCountdown(expireDate, elementId) {
+  function update() {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+
+    const timeLeft = new Date(expireDate) - new Date();
+    if (timeLeft <= 0) {
+      el.textContent = ' - Deal ended';
+      clearInterval(timer);
+    } else {
+      const hrs = String(Math.floor(timeLeft / 3600000)).padStart(2, '0');
+      const mins = String(Math.floor((timeLeft % 3600000) / 60000)).padStart(2, '0');
+      const secs = String(Math.floor((timeLeft % 60000) / 1000)).padStart(2, '0');
+      el.textContent = ` - Ends in: ${hrs}:${mins}:${secs}`;
+    }
+  }
+
+  update();
+  const timer = setInterval(update, 1000);
+}
+
+  </script>
 
            
 </div></div></div></div></div></div>
